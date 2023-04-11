@@ -29,6 +29,7 @@
   "author": "Jake Tober",
   "license": "MIT",
   "devDependencies": {
+    "@types/node": "^18.15.11",
     "@typescript-eslint/eslint-plugin": "^5.58.0",
     "@typescript-eslint/parser": "^5.58.0",
     "del-cli": "^5.0.0",
