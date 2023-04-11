@@ -88,11 +88,29 @@ export function writeTextFileLines(
   }
 }
 
+/**
+ * A description of a file or folder in your file system
+ */
 interface FSNodeDescription {
+  /**
+   * The name of the node
+   */
   name: string;
+  /***
+   * The full name of the node's parent
+   */
   parent: string;
+  /**
+   * True if this node represents a file
+   */
   isFile: boolean;
+  /**
+   * True if this node represents a folder
+   */
   isFolder: boolean;
+  /**
+   * The full name of the node
+   */
   fullName: string;
 }
 
@@ -157,11 +175,11 @@ function singleOrArrayToArray<T>(list?: T | T[]): T[] {
 }
 
 /**
- * Lists all files in the specified path
+ * Recursively lists all files in the specified path
  * @param request the parameters of the file search
- * @returns an iterator to fetch your files
+ * @returns a generator to fetch your files as you need them
  */
-export function listAllFiles(
+export function listAllFilesAsGenerator(
   request: FileSearchRequestOptions
 ): Generator<FSNodeDescription> {
   const include = singleOrArrayToArray(request.include);
@@ -175,6 +193,17 @@ export function listAllFiles(
 
   const filter = makeCombinedFilter<FSNodeDescription>(include, exclude);
   return RecursiveFileSearch(request.path, { filter });
+}
+
+/**
+ * Recursively lists all files in the specified path
+ * @param request the parameters of the file search
+ * @returns an array with all of the matching files
+ */
+export function listAllFiles(
+  request: FileSearchRequestOptions
+): FSNodeDescription[] {
+  return Array.from(listAllFilesAsGenerator(request));
 }
 
 /**
