@@ -1,0 +1,4 @@
+# Ignore
+lib
+.vscode
+node_modules
