@@ -109,8 +109,29 @@ class DependencyGraph<DependencyNode> {
     this.#nodeMap.clear();
     this.#colorMap.clear();
   }
-  mergeNodes(newName: string, nodes: DependencyNode[]): void {
-    this.#mergeNodes(newName, nodes);
+  mergeNodes(
+    newName: string,
+    predicate: Transformer<TransformProps<DependencyNode>, boolean>
+  ): void;
+  mergeNodes(newName: string, nodes: DependencyNode[]): void;
+  mergeNodes(
+    newName: string,
+    nodesOrPredicate:
+      | DependencyNode[]
+      | Transformer<TransformProps<DependencyNode>, boolean>
+  ): void {
+    if (Array.isArray(nodesOrPredicate)) {
+      this.#mergeNodes(newName, nodesOrPredicate);
+    } else {
+      const allEntries = Array.from(this.#nodeMap.entries());
+      const allEntriesMapped = allEntries.map(([node, meta]) => ({
+        node,
+        meta,
+      }));
+      const selectedEntries = allEntriesMapped.filter(nodesOrPredicate);
+      const selectedNodes = selectedEntries.map(({ node }) => node);
+      this.#mergeNodes(newName, selectedNodes);
+    }
   }
   toGraphViz(options?: CreateGraphOptions<DependencyNode>): string;
   toGraphViz(
