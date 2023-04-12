@@ -367,12 +367,17 @@ class DependencyGraph<DependencyNode> {
     if (!this.#colorMap.has(text)) {
       let keepGoing = true;
       let suggestedColor = textToColorIndex(text);
+      let colorIncrement = 7;
       while (keepGoing) {
         keepGoing =
           this.#colorMap.size < MAX_UNIQUE_COLORS &&
           Array.from(this.#colorMap.values()).includes(suggestedColor);
         if (keepGoing) {
-          suggestedColor = (suggestedColor + 7) % MAX_UNIQUE_COLORS;
+          suggestedColor =
+            (suggestedColor + colorIncrement) % MAX_UNIQUE_COLORS;
+          if (colorIncrement > 1) {
+            colorIncrement--;
+          }
         }
       }
       this.#colorMap.set(text, suggestedColor);
