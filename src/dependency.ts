@@ -7,30 +7,53 @@ import {
 } from "./graphviz";
 import { Transformer } from "./types";
 
-interface DependencyNodeMetaData {
+const MAX_UNIQUE_COLORS = 50;
+
+interface DependencyNodeMetaData<DependencyNode> {
   id?: string;
-  name?: string;
-  node: unknown;
-  mergedWith?: DependencyNodeMetaData;
-  mergedFrom?: Set<DependencyNodeMetaData>;
-  dependsOn: Set<DependencyNodeMetaData>;
-  dependsFrom: Set<DependencyNodeMetaData>;
+  name: string;
+  node: DependencyNode;
+  mergedWith?: DependencyNodeMetaData<DependencyNode>;
+  mergedFrom?: Set<DependencyNodeMetaData<DependencyNode>>;
+  dependsOn: Set<DependencyNodeMetaData<DependencyNode>>;
+  dependsFrom: Set<DependencyNodeMetaData<DependencyNode>>;
 }
 
 type NodeMap<DependencyNode = unknown> = Map<
   DependencyNode,
-  DependencyNodeMetaData
+  DependencyNodeMetaData<DependencyNode>
 >;
 
 type DependencyPair<T = unknown> = { from: T; to: T };
 
-interface CreateGraphOptions<DependencyNode = unknown> {
+interface TransformProps<DependencyNode> {
+  node: DependencyNode;
+  meta: Readonly<Pick<DependencyNodeMetaData<DependencyNode>, "id" | "name">>;
+}
+
+export type NodeStylizerProps<DependencyNode = unknown> =
+  TransformProps<DependencyNode>;
+export type NodeStylizerReturn = Omit<GraphVizNode, "id" | "label"> &
+  Partial<Pick<GraphVizNode, "label">>;
+export type NodeStylizer<DependencyNode = unknown> = Transformer<
+  NodeStylizerProps<DependencyNode>,
+  NodeStylizerReturn
+>;
+
+export type EdgeStylizerProps<DependencyNode = unknown> = DependencyPair<
+  TransformProps<DependencyNode>
+>;
+export type EdgeStylizerReturn = Omit<GraphVizEdge, "from" | "to">;
+export type EdgeStylizer<DependencyNode = unknown> = Transformer<
+  EdgeStylizerProps<DependencyNode>,
+  EdgeStylizerReturn
+>;
+
+interface CreateGraphOptions<DependencyNode> {
   includeInboundDependencies?: boolean;
-  nodeStylizer?: Transformer<DependencyNode, Omit<GraphVizNode, "id">>;
-  edgeStylizer?: Transformer<
-    { from: DependencyNode; to: DependencyNode },
-    Omit<GraphVizEdge, "from" | "to">
-  >;
+  showSelfDependencies?: boolean;
+  nodeStylizer?: NodeStylizer<DependencyNode>;
+  edgeStylizer?: EdgeStylizer<DependencyNode>;
 }
 
 export function createDependencyGraph<
@@ -39,11 +62,37 @@ export function createDependencyGraph<
   return new DependencyGraph<DNode>();
 }
 
+/**
+ * Computes hashcode of a string
+ * https://gist.github.com/hyamamoto/fd435505d29ebfa3d9716fd2be8d42f0
+ */
+function hashCode(text: string) {
+  let result = 0;
+  for (let i = 0; i < text.length; i++)
+    result = (Math.imul(31, result) + text.charCodeAt(i)) | 0;
+
+  return result;
+}
+
+const HSV = (hue: number) => `${round(hue, 0.01)} 1.00 1.00`;
+
+function textToColorIndex(text: string): number {
+  const hash = hashCode(text);
+  const colorIndex = (Math.abs(hash) % MAX_UNIQUE_COLORS) / MAX_UNIQUE_COLORS;
+  return colorIndex;
+}
+
+function round(num: number, roundingFactor: number): number {
+  return Math.round(num / roundingFactor) * roundingFactor;
+}
+
 class DependencyGraph<DependencyNode> {
   #nodeMap: NodeMap<DependencyNode>;
+  #colorMap: Map<string, number>;
 
   constructor() {
     this.#nodeMap = new Map();
+    this.#colorMap = new Map();
   }
 
   defineNode(node: DependencyNode, name: string): void {
@@ -58,15 +107,19 @@ class DependencyGraph<DependencyNode> {
   }
   clear(): void {
     this.#nodeMap.clear();
+    this.#colorMap.clear();
   }
   mergeNodes(newName: string, nodes: DependencyNode[]): void {
     this.#mergeNodes(newName, nodes);
   }
-  toGraphViz(options?: CreateGraphOptions): string;
-  toGraphViz(nodes: DependencyNode[], options?: CreateGraphOptions): string;
+  toGraphViz(options?: CreateGraphOptions<DependencyNode>): string;
   toGraphViz(
-    maybeNodes?: DependencyNode[] | CreateGraphOptions,
-    options?: CreateGraphOptions
+    nodes: DependencyNode[],
+    options?: CreateGraphOptions<DependencyNode>
+  ): string;
+  toGraphViz(
+    maybeNodes?: DependencyNode[] | CreateGraphOptions<DependencyNode>,
+    options?: CreateGraphOptions<DependencyNode>
   ): string {
     const nodesToInclude = Array.isArray(maybeNodes)
       ? maybeNodes
@@ -77,22 +130,26 @@ class DependencyGraph<DependencyNode> {
     return generateGraphVizConfig(graph);
   }
 
-  #getMetaData(node: DependencyNode): DependencyNodeMetaData {
+  #getMetaData(node: DependencyNode): DependencyNodeMetaData<DependencyNode> {
     if (!node) {
       throw new Error("Node null or undefined");
     }
     if (!this.#nodeMap.has(node)) {
       this.#nodeMap.set(node, {
         node,
+        name: "??",
         dependsOn: new Set(),
         dependsFrom: new Set(),
       });
     }
-    const result: DependencyNodeMetaData = this.#nodeMap.get(node)!;
+    const result: DependencyNodeMetaData<DependencyNode> =
+      this.#nodeMap.get(node)!;
     return this.#grabLatest(result);
   }
 
-  #grabLatest(node: DependencyNodeMetaData): DependencyNodeMetaData {
+  #grabLatest(
+    node: DependencyNodeMetaData<DependencyNode>
+  ): DependencyNodeMetaData<DependencyNode> {
     let result = node;
     while (result.mergedWith) {
       result = result.mergedWith;
@@ -129,7 +186,7 @@ class DependencyGraph<DependencyNode> {
     _to.dependsFrom.delete(_from);
   }
 
-  #populateNodeIds(nodes: DependencyNodeMetaData[]): void {
+  #populateNodeIds(nodes: DependencyNodeMetaData<DependencyNode>[]): void {
     const knownIds: Set<string> = new Set();
     nodes.forEach((md) => {
       if (md.id) {
@@ -163,7 +220,7 @@ class DependencyGraph<DependencyNode> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const resultMD = this.#getMetaData(result as any);
     resultMD.name = mergedName;
-    const allPruned = new Set<DependencyNodeMetaData>();
+    const allPruned = new Set<DependencyNodeMetaData<DependencyNode>>();
     pruned.forEach((node) => {
       const md = this.#getMetaData(node);
       if (md.mergedFrom) {
@@ -206,15 +263,16 @@ class DependencyGraph<DependencyNode> {
 
   #createGraph(
     nodes: DependencyNode[],
-    options?: CreateGraphOptions
+    options?: CreateGraphOptions<DependencyNode>
   ): GraphVizGraph {
     const {
-      includeInboundDependencies = false,
+      includeInboundDependencies = true,
+      showSelfDependencies = false,
       nodeStylizer,
       edgeStylizer,
     } = options ?? {};
-    const allNodes = new Set<DependencyNodeMetaData>();
-    const toBeWalked: DependencyNodeMetaData[] = [];
+    const allNodes = new Set<DependencyNodeMetaData<DependencyNode>>();
+    const toBeWalked: DependencyNodeMetaData<DependencyNode>[] = [];
     nodes.forEach((node) => {
       const md = this.#getMetaData(node);
       toBeWalked.push(md);
@@ -245,29 +303,76 @@ class DependencyGraph<DependencyNode> {
     const allNodesArray = Array.from(allNodes);
     this.#populateNodeIds(allNodesArray);
     const graphNodes = allNodesArray.map((node) => {
-      const nodeStyle = nodeStylizer ? nodeStylizer(node.node) : {};
+      const styleProps = {
+        node: node.node,
+        meta: { id: node.id, name: node.name },
+      };
+      const defaultStyle = this.#DefaultNodeStylizer(styleProps);
+      const nodeStyle = nodeStylizer ? nodeStylizer(styleProps) : {};
       return {
         id: node.id as GraphVizNodeId,
-        label: node.name || "??",
+        label: node.name,
+        ...defaultStyle,
         ...nodeStyle,
       };
     });
     const graphEdges = allNodesArray.flatMap((from) => {
       return Array.from(from.dependsOn).map((to) => {
-        const edgeStyle = edgeStylizer
-          ? edgeStylizer({ from: from.node, to: to.node })
-          : {};
+        if (to === from && !showSelfDependencies) {
+          return;
+        }
+        const styleProps = {
+          from: { node: from.node, meta: { id: from.id, name: from.name } },
+          to: { node: to.node, meta: { id: to.id, name: to.name } },
+        };
+        const defaultStyle = this.#DefaultEdgeStylizer(styleProps);
+        const edgeStyle = edgeStylizer ? edgeStylizer(styleProps) : {};
         return {
           from: from.id as GraphVizNodeId,
           to: to.id as GraphVizNodeId,
+          ...defaultStyle,
           ...edgeStyle,
         };
       });
     });
     const result: GraphVizGraph = {
       nodes: graphNodes,
-      edges: graphEdges,
+      edges: filterDefined(graphEdges),
     };
     return result;
   }
+
+  #uniqueColorsForText(text: string): string {
+    if (!this.#colorMap.has(text)) {
+      let keepGoing = true;
+      let suggestedColor = textToColorIndex(text);
+      while (keepGoing) {
+        keepGoing =
+          this.#colorMap.size < MAX_UNIQUE_COLORS &&
+          Array.from(this.#colorMap.values()).includes(suggestedColor);
+        if (keepGoing) {
+          suggestedColor = (suggestedColor + 7) % MAX_UNIQUE_COLORS;
+        }
+      }
+      this.#colorMap.set(text, suggestedColor);
+    }
+    return HSV(this.#colorMap.get(text)!);
+  }
+
+  #DefaultEdgeStylizer({ from }: EdgeStylizerProps): EdgeStylizerReturn {
+    return {
+      color: this.#uniqueColorsForText(from.meta.name),
+    };
+  }
+
+  #DefaultNodeStylizer(node: NodeStylizerProps): NodeStylizerReturn {
+    return {
+      shape: "record",
+      color: this.#uniqueColorsForText(node.meta.name),
+    };
+  }
+}
+
+function filterDefined<T>(list: (T | undefined)[]): T[] {
+  return list.filter((i) => i !== undefined) as T[];
 }
