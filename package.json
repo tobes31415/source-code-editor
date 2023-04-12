@@ -4,7 +4,9 @@
   "description": "A collection of useful functions for manipulating files containing source code",
   "exports": {
     ".": "./lib/index.js",
-    "./files": "./lib/files.js"
+    "./files": "./lib/files.js",
+    "./dependency": "./lib/dependency.js",
+    "./graphviz": "./lib/graphviz.js"
   },
   "types": "./lib/index.d.ts",
   "type": "module",
