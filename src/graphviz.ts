@@ -160,17 +160,30 @@ export function generateGraphVizConfig(
       .filter((id) => !clusterNodes.has(id) || multiClusterNodes.has(id))
   );
 
+  const renderTheseNodes = (nodeIds: GraphVizNodeId[]) => {
+    nodeIds.forEach((id) => {
+      const node = graphDescription.nodes.find((node) => node.id === id);
+      if (node) {
+        let nodeAttributes: string;
+        if (node.id === node.label) {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { id, label, ...rest } = node;
+          nodeAttributes = propsToAttributes(rest);
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { id, ...rest } = node;
+          nodeAttributes = propsToAttributes(rest);
+        }
+        sb.push(`        "${id}" ${nodeAttributes}`);
+      }
+    });
+  };
+
   const sb = [];
   sb.push(`digraph graphname`);
   sb.push(`{`);
   sb.push(`    subgraph root {`);
-  Array.from(rootNodes).forEach((id) => {
-    const node = graphDescription.nodes.find((node) => node.id === id);
-    if (node) {
-      const nodeAttributes = propsToAttributes(node);
-      sb.push(`        "${id}" ${nodeAttributes}`);
-    }
-  });
+  renderTheseNodes(Array.from(rootNodes));
   sb.push(`    }`);
   sb.push("");
   graphDescription.clusters?.forEach((cluster, index) => {
@@ -181,13 +194,7 @@ export function generateGraphVizConfig(
       ""
     );
     sb.push(`        ${styleAttributes}`);
-    Array.from(nodes).forEach((nodeId) => {
-      const node = graphDescription.nodes.find((node) => node.id === nodeId);
-      if (node) {
-        const nodeAttributes = propsToAttributes(node);
-        sb.push(`        "${nodeId}" ${nodeAttributes}`);
-      }
-    });
+    renderTheseNodes(nodes);
     sb.push(`    }`);
     sb.push("");
   });
