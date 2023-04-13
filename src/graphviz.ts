@@ -1,4 +1,7 @@
 export type GraphVizNodeId = string & { _GraphVizNodeId: "GraphVizNodeId" };
+export type GraphVizClusterId = string & {
+  _GraphVizClusterId: "GraphVizClusterId";
+};
 
 export type GraphVizNodeShape =
   | "record"
@@ -78,6 +81,9 @@ export interface GraphVizEdgeStyle extends GraphVizSharedStyle {
   tapered?: boolean;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-interface
+export interface GraphVizClusterStyle extends GraphVizSharedStyle {}
+
 export interface GraphVizNode {
   id: GraphVizNodeId;
   shape?: GraphVizNodeShape;
@@ -103,9 +109,18 @@ export interface GraphVizEdge {
   style?: GraphVizEdgeStyle;
 }
 
+export interface GraphVizCluster {
+  id?: GraphVizClusterId;
+  style?: GraphVizClusterStyle;
+  color?: string;
+  label?: string;
+  nodes: GraphVizNodeId[];
+}
+
 export interface GraphVizGraph {
   nodes: GraphVizNode[];
   edges: GraphVizEdge[];
+  clusters?: GraphVizCluster[];
 }
 
 function propsToAttributes(obj: object): string {
@@ -129,19 +144,58 @@ function propsToAttributes(obj: object): string {
 export function generateGraphVizConfig(
   graphDescription: GraphVizGraph
 ): string {
+  const clusterNodes = new Set<GraphVizNodeId>();
+  const multiClusterNodes = new Set<GraphVizNodeId>();
+  graphDescription.clusters?.forEach((cluster) => {
+    cluster.nodes.forEach((node) => {
+      if (clusterNodes.has(node)) {
+        multiClusterNodes.add(node);
+      }
+      clusterNodes.add(node);
+    });
+  });
+  const rootNodes = new Set<GraphVizNodeId>(
+    graphDescription.nodes
+      .map((node) => node.id)
+      .filter((id) => !clusterNodes.has(id) || multiClusterNodes.has(id))
+  );
+
   const sb = [];
   sb.push(`digraph graphname`);
   sb.push(`{`);
-  graphDescription.nodes.forEach(({ id, ...node }) => {
-    const nodeAttributes = propsToAttributes(node);
-    sb.push(`    "${id}" ${nodeAttributes}`);
-  });
-  sb.push(`    subgraph Rel1 {`);
-  graphDescription.edges.forEach(({ from, to, ...edge }) => {
-    const edgeAtributes = propsToAttributes(edge);
-    sb.push(`        "${from}" -> "${to}" ${edgeAtributes}`);
+  sb.push(`    subgraph root {`);
+  Array.from(rootNodes).forEach((id) => {
+    const node = graphDescription.nodes.find((node) => node.id === id);
+    if (node) {
+      const nodeAttributes = propsToAttributes(node);
+      sb.push(`        "${id}" ${nodeAttributes}`);
+    }
   });
   sb.push(`    }`);
+  sb.push("");
+  graphDescription.clusters?.forEach((cluster, index) => {
+    const { id, nodes, ...styleProps } = cluster;
+    sb.push(`    subgraph cluster_${id ?? index} {`);
+    const styleAttributes = propsToAttributes(styleProps).replaceAll(
+      /^\[|\]$/g,
+      ""
+    );
+    sb.push(`        ${styleAttributes}`);
+    Array.from(nodes).forEach((nodeId) => {
+      const node = graphDescription.nodes.find((node) => node.id === nodeId);
+      if (node) {
+        const nodeAttributes = propsToAttributes(node);
+        sb.push(`        "${nodeId}" ${nodeAttributes}`);
+      }
+    });
+    sb.push(`    }`);
+    sb.push("");
+  });
+  graphDescription.edges.forEach(({ from, to, ...edge }) => {
+    const edgeAtributes = propsToAttributes(edge);
+    sb.push(`    "${from}" -> "${to}" ${edgeAtributes}`);
+  });
+
   sb.push(`}`);
   return sb.join("\n");
 }

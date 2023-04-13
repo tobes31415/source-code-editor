@@ -1,4 +1,6 @@
 import {
+  GraphVizCluster,
+  GraphVizClusterId,
   GraphVizEdge,
   GraphVizGraph,
   GraphVizNode,
@@ -12,6 +14,7 @@ const MAX_UNIQUE_COLORS = 50;
 interface DependencyNodeMetaData<DependencyNode> {
   id?: string;
   name: string;
+  group?: string;
   node: DependencyNode;
   mergedWith?: DependencyNodeMetaData<DependencyNode>;
   mergedFrom?: Set<DependencyNodeMetaData<DependencyNode>>;
@@ -49,11 +52,20 @@ export type EdgeStylizer<DependencyNode = unknown> = Transformer<
   EdgeStylizerReturn
 >;
 
+export type ClusterStylizerProps = string;
+export type ClusterStylizerReturn = Omit<GraphVizCluster, "id" | "label"> &
+  Partial<Pick<GraphVizCluster, "label">>;
+export type ClusterStylizer = Transformer<
+  ClusterStylizerProps,
+  ClusterStylizerReturn
+>;
+
 interface CreateGraphOptions<DependencyNode> {
   includeInboundDependencies?: boolean;
   showSelfDependencies?: boolean;
   nodeStylizer?: NodeStylizer<DependencyNode>;
   edgeStylizer?: EdgeStylizer<DependencyNode>;
+  clusterStylizer?: ClusterStylizer;
 }
 
 export function createDependencyGraph<
@@ -95,8 +107,29 @@ class DependencyGraph<DependencyNode> {
     this.#colorMap = new Map();
   }
 
-  defineNode(node: DependencyNode, name: string): void {
-    this.#getMetaData(node).name = name;
+  defineNode(node: DependencyNode, name: string, group?: string): void {
+    const md = this.#getMetaData(node);
+    md.name = name;
+    md.group = group;
+  }
+
+  applyGrouping(nodes: DependencyNode[], group: string): void;
+  applyGrouping(
+    fn: Transformer<TransformProps<DependencyNode>, string | undefined>
+  ): void;
+  applyGrouping(
+    fn:
+      | DependencyNode[]
+      | Transformer<TransformProps<DependencyNode>, string | undefined>,
+    group?: string
+  ): void {
+    if (typeof fn === "function") {
+      Array.from(this.#nodeMap.entries()).forEach(([node, meta]) => {
+        meta.group = fn({ node, meta }) ?? meta.group;
+      });
+    } else {
+      fn.forEach((node) => (this.#getMetaData(node).group = group));
+    }
   }
 
   addDependency(dependency: DependencyPair<DependencyNode>): void {
@@ -246,33 +279,33 @@ class DependencyGraph<DependencyNode> {
       const md = this.#getMetaData(node);
       if (md.mergedFrom) {
         for (const mf of md.mergedFrom) {
-          console.log(`Considering previous merges ${mf.name}`);
+          //console.log(`Considering previous merges ${mf.name}`);
           allPruned.add(mf);
         }
       }
-      console.log(`Considering the merge of ${md.name}`);
+      //console.log(`Considering the merge of ${md.name}`);
       allPruned.add(md);
     });
     allPruned.forEach((willBePrunedMD) => {
       willBePrunedMD.mergedWith = resultMD;
       willBePrunedMD.mergedFrom?.clear();
     });
-    console.log(`Merging ${allPruned.size} nodes`);
+    //console.log(`Merging ${allPruned.size} nodes`);
     allPruned.forEach((nodeBeingPruned) => {
       const cloneDependOn = Array.from(nodeBeingPruned.dependsOn);
       const cloneDependsFrom = Array.from(nodeBeingPruned.dependsFrom);
       cloneDependOn.forEach((other) => {
-        console.log(
-          `Migrating outbound dependendcy ${nodeBeingPruned.name} -> ${other.name} to result `
-        );
+        // console.log(
+        //   `Migrating outbound dependendcy ${nodeBeingPruned.name} -> ${other.name} to result `
+        // );
         other.dependsFrom.delete(nodeBeingPruned);
         other.dependsFrom.add(resultMD);
         resultMD.dependsOn.add(this.#grabLatest(other));
       });
       cloneDependsFrom.forEach((other) => {
-        console.log(
-          `Migrating inbound dependendcy ${other.name} -> ${nodeBeingPruned.name} to result `
-        );
+        // console.log(
+        //   `Migrating inbound dependendcy ${other.name} -> ${nodeBeingPruned.name} to result `
+        // );
         other.dependsOn.delete(nodeBeingPruned);
         other.dependsOn.add(resultMD);
         resultMD.dependsFrom.add(this.#grabLatest(other));
@@ -291,6 +324,7 @@ class DependencyGraph<DependencyNode> {
       showSelfDependencies = false,
       nodeStylizer,
       edgeStylizer,
+      clusterStylizer,
     } = options ?? {};
     const allNodes = new Set<DependencyNodeMetaData<DependencyNode>>();
     const toBeWalked: DependencyNodeMetaData<DependencyNode>[] = [];
@@ -321,6 +355,7 @@ class DependencyGraph<DependencyNode> {
         }
       }
     }
+    const clusterMap = new Map<string, GraphVizNodeId[]>();
     const allNodesArray = Array.from(allNodes);
     this.#populateNodeIds(allNodesArray);
     const graphNodes = allNodesArray.map((node) => {
@@ -330,6 +365,12 @@ class DependencyGraph<DependencyNode> {
       };
       const defaultStyle = this.#DefaultNodeStylizer(styleProps);
       const nodeStyle = nodeStylizer ? nodeStylizer(styleProps) : {};
+      if (node.group) {
+        if (!clusterMap.has(node.group)) {
+          clusterMap.set(node.group, []);
+        }
+        clusterMap.get(node.group)!.push(node.id! as GraphVizNodeId);
+      }
       return {
         id: node.id as GraphVizNodeId,
         label: node.name,
@@ -356,9 +397,16 @@ class DependencyGraph<DependencyNode> {
         };
       });
     });
+    const clusters: GraphVizCluster[] = Array.from(clusterMap.entries()).map(
+      ([id, nodes]) => {
+        const clusterStyle = clusterStylizer ? clusterStylizer(id) : {};
+        return { id: id as GraphVizClusterId, nodes, ...clusterStyle };
+      }
+    );
     const result: GraphVizGraph = {
       nodes: graphNodes,
       edges: filterDefined(graphEdges),
+      clusters,
     };
     return result;
   }
