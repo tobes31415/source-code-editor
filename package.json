@@ -28,7 +28,7 @@
     "format": "prettier --write src/.",
     "fix-lint": "eslint src/** --fix",
     "assert-format": "prettier src/.",
-    "assert-lint": "eslint src/**",
+    "assert-lint": "eslint src --max-warnings 0",
     "prepare": "husky install",
     "husky": "husky",
     "pre-commit": "run-s format fix-lint",
