@@ -27,7 +27,7 @@
     "fix-imports": "fix-tsc-esnext-imports ./lib",
     "format": "prettier --write src/.",
     "fix-lint": "eslint src/** --fix",
-    "assert-format": "prettier src/.",
+    "assert-format": "prettier src/. --check",
     "assert-lint": "eslint src --max-warnings 0",
     "prepare": "husky install",
     "husky": "husky",
