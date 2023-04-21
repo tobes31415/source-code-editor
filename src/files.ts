@@ -112,6 +112,14 @@ interface FSNodeDescription {
    * The full name of the node
    */
   fullName: string;
+  /**
+   * The size of the file in bytes
+   */
+  size: number;
+  /**
+   * When the file was last modified
+   */
+  lastModified: Date;
 }
 
 interface FileSearchRequestOptions {
@@ -136,6 +144,10 @@ interface FileSearchRequestOptions {
    */
   allowNodeModules?: boolean;
   /**
+   * Optional disable the built-in exclusion file for the .git folder
+   */
+  allowGit?: boolean;
+  /**
    * If provided then only the specified extensions will be returned
    */
   allowedExtensions?: string[];
@@ -152,6 +164,10 @@ export const excludeByName = (name: string) => (node: FSNodeDescription) =>
  * Excludes the node_modules folder
  */
 export const excludeNodeModules = excludeByName("node_modules");
+/**
+ * Excludes the node_modules folder
+ */
+export const excludeGitFolder = excludeByName(".git");
 
 /**
  * Includes files only if they match one of the specified file extensions
@@ -186,6 +202,9 @@ export function listAllFilesAsGenerator(
   const exclude = singleOrArrayToArray(request.exclude);
   if (!request.allowNodeModules) {
     exclude.unshift(excludeNodeModules);
+  }
+  if (!request.allowGit) {
+    exclude.unshift(excludeGitFolder);
   }
   if (request.allowedExtensions) {
     include.push(includeFilesByExtension(request.allowedExtensions));
@@ -324,5 +343,7 @@ function describeNode(parent: string, name: string): FSNodeDescription {
     fullName,
     isFile,
     isFolder: !isFile,
+    size: stats.size,
+    lastModified: stats.mtime,
   };
 }

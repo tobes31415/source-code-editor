@@ -1,12 +1,13 @@
 {
   "name": "source-editor",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "A collection of useful functions for manipulating files containing source code",
   "exports": {
     ".": "./lib/index.js",
     "./files": "./lib/files.js",
     "./dependency": "./lib/dependency.js",
-    "./graphviz": "./lib/graphviz.js"
+    "./graphviz": "./lib/graphviz.js",
+    "./rsync": "./lib/rsync.js"
   },
   "types": "./lib/index.d.ts",
   "type": "module",
