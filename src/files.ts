@@ -285,6 +285,10 @@ export function* RecursiveFileSearch(
   filePath: string,
   options?: RFSOptions
 ): Generator<FSNodeDescription> {
+  if (!fs.existsSync(filePath)) {
+    return;
+  }
+
   const {
     filter,
     emitFolders,
