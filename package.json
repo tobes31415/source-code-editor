@@ -1,5 +1,5 @@
 {
-  "name": "source-editor",
+  "name": "source-code-editor",
   "version": "0.0.1",
   "description": "A collection of useful functions for manipulating files containing source code",
   "repository": {
