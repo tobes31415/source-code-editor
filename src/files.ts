@@ -91,7 +91,7 @@ export function writeTextFileLines(
 /**
  * A description of a file or folder in your file system
  */
-interface FSNodeDescription {
+export interface FSNodeDescription {
   /**
    * The name of the node
    */
@@ -122,7 +122,7 @@ interface FSNodeDescription {
   lastModified: Date;
 }
 
-interface FileSearchRequestOptions {
+export interface FileSearchRequestOptions {
   /**
    * The path to start searching from
    */
